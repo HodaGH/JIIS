@@ -1,0 +1,78 @@
+
+import java.util.ArrayList;
+
+public class NearDuplicates {
+	boolean initialized = false;
+	MinHash m;
+	LSH l;
+	double similarity;
+	int numBands;
+	
+	
+	public String[] nearDuplicateDetector(String directory, int numPermutations, double similarity, String sesName){
+		MinHash m = new MinHash(directory, numPermutations);
+		int numBands = findNumBands(numPermutations, similarity);
+		LSH l = new LSH(m.minHashMatrix(), m.allSes(), numBands);
+		String[] possibleDuplicates = l.nearDuplicatesOf(sesName);
+		ArrayList<String> duplicates = new ArrayList<String>();
+		for(String posSes : possibleDuplicates){
+			if(m.approximateJaccard(sesName, posSes) >= similarity){
+				duplicates.add(posSes);
+			}
+		}
+		String[] duplicatesArray = duplicates.toArray(new String[duplicates.size()]);
+		
+		initialized = true;
+		this.m = m;
+		this.l = l;
+		this.similarity = similarity;
+		this.numBands = numBands;
+    
+		return duplicatesArray;
+	}
+	
+	
+	public String[] detect(String sesName){
+		if(!initialized){
+			return null;
+		}
+		String[] possibleDuplicates = l.nearDuplicatesOf(sesName);
+		ArrayList<String> duplicates = new ArrayList<String>();
+		for(String posSes : possibleDuplicates){
+			if(m.approximateJaccard(sesName, posSes) >= similarity){
+				duplicates.add(posSes);
+			}
+		}
+		String[] duplicatesArray = duplicates.toArray(new String[duplicates.size()]);
+		return duplicatesArray;
+	}
+	
+	
+	
+	private int findNumBands(int numPermutations, double similarity){
+		int best = 1;
+		double bestDiff = 1.0;
+		ArrayList<Integer> factors = new ArrayList<Integer>();
+		factors.add(1);
+		int test = 2;
+		while(test*test <= numPermutations){
+			if(numPermutations%test == 0){
+				factors.add(test);
+			}
+			test++;
+		}
+		int tempSize = factors.size();
+		for(int i = tempSize - 1; i >= 0; i--){
+			factors.add(numPermutations / factors.get(i));
+		}
+		for(int f : factors){
+			double trySim = Math.pow(1.0/f, (double)f/numPermutations);
+			
+			if(similarity >= trySim && similarity - trySim < bestDiff){
+				best = f;
+				bestDiff = Math.abs(similarity - trySim);
+			}
+		}
+		return best;
+	}
+}
