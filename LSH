@@ -1,0 +1,116 @@
+
+import java.util.ArrayList;
+import java.util.Collections;
+
+public class LSH {
+	
+
+	ArrayList<ArrayList<ArrayList<ArrayList<Integer>>>> hashTable = new ArrayList<ArrayList<ArrayList<ArrayList<Integer>>>>();
+	String[] sesNames;
+	int bands;
+	int[][] minHashMatrix;
+	
+	
+	public LSH(int[][] minHashMatrix, String[] sesNames, int bands){
+		this.bands = bands;
+		this.sesNames = sesNames;
+		this.minHashMatrix = minHashMatrix;
+		int bandSize = minHashMatrix.length / bands;
+		
+		for(int i = 0; i < bands; i++){
+			hashTable.add(new ArrayList<ArrayList<ArrayList<Integer>>>());	
+			for(int j = 0; j < sesNames.length; j++){
+				hashTable.get(i).add(new ArrayList<ArrayList<Integer>>());
+			}
+		}
+	
+		for(int i = 0; i < sesNames.length; i++){
+			int[] sig = new int[minHashMatrix.length];
+			for(int j = 0; j < sig.length; j++){
+				sig[j] = minHashMatrix[j][i];
+			}	
+			
+			for(int j = 0; j < bands; j++){
+				int[] sigPiece = new int[bandSize];
+				for(int k = 0; k < bandSize; k++){
+					sigPiece[k] = sig[j*bandSize + k];
+				}
+				int hash = FNVHash(sigPiece);
+				int hashSpot = (hash%sesNames.length + sesNames.length)%sesNames.length;
+				boolean appended = false;
+				for(int k = 0; k < hashTable.get(j).get(hashSpot).size(); k++){
+					if(hashTable.get(j).get(hashSpot).get(k).get(0) == hash){
+						hashTable.get(j).get(hashSpot).get(k).add(i);
+						appended = true;
+						break;
+					}
+				}
+				if(!appended){
+					ArrayList<Integer> temp = new ArrayList<Integer>();
+					temp.add(hash);
+					temp.add(i);
+					hashTable.get(j).get(hashSpot).add(temp);
+				}
+			}
+		}	
+	}
+	
+	
+	public String[] nearDuplicatesOf(String sesName){
+		for(int i = 0; i < sesNames.length; i++){
+			if (sesNames[i].equals(sesName)){
+				int[] sig = new int[minHashMatrix.length];
+				for(int j = 0; j < sig.length; j++){
+					sig[j] = minHashMatrix[j][i];
+				}
+				ArrayList<Integer> similarSes = new ArrayList<Integer>();
+				int bandSize = minHashMatrix.length / bands;
+				for(int j = 0; j < bands; j++){
+					int[] sigPiece = new int[bandSize];
+					for(int k = 0; k < bandSize; k++){
+						sigPiece[k] = sig[j*bandSize + k];
+					}
+					int hash = FNVHash(sigPiece);
+					int hashSpot = (hash%sesNames.length + sesNames.length)%sesNames.length;
+					ArrayList<ArrayList<Integer>> bandArray = hashTable.get(j).get(hashSpot);
+					for(int k = 0; k < bandArray.size(); k++){
+						if(bandArray.get(k).get(0) == hash){
+							for(int l = 1; l < bandArray.get(k).size(); l++){
+								if(bandArray.get(k).get(l) != i && !similarSes.contains(bandArray.get(k).get(l))){
+									similarSes.add(bandArray.get(k).get(l));
+								}
+							}
+							break;
+						}
+					}
+				}
+				Collections.sort(similarSes);
+				String[] sesDuplicates = new String[similarSes.size()];
+				for(int j = 0; j < similarSes.size(); j++){
+					sesDuplicates[j] = sesNames[similarSes.get(j)];
+				}
+				return sesDuplicates;
+			}
+		}
+		return null; 
+	}
+	
+	private static final long FNV64PRIME = 0x100000001b3L;
+	private static final long FNV64INIT = 0xcbf29ce484222325L;
+	private static int FNVHash(int[] tuple){
+		byte[] byteArray = new byte[4*tuple.length];
+		for(int i = 0; i < tuple.length; i++){
+			byteArray[4*i] = (byte)tuple[i];
+			byteArray[4*i+1] = (byte)(tuple[i]/0x100);
+			byteArray[4*i+2] = (byte)(tuple[i]/0x10000);
+			byteArray[4*i+3] = (byte)(tuple[i]/0x1000000);
+		}
+		long h = FNV64INIT;
+		for(int i = 0; i < byteArray.length; i++){
+			h ^= byteArray[i];
+			h *= FNV64PRIME;
+		}
+		return (int)h; 
+	}
+	
+}
