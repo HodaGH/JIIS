@@ -1,0 +1,22 @@
+
+public class MinHashAccuracy {
+	
+	public static int accuracy(String folder, int numPermutations, double error) {
+		
+		return accuracy(new MinHash(folder,numPermutations), error);
+	}
+	
+	public static int accuracy(MinHash m, double error){
+		int numOutsideError = 0;
+		for(int i = 0; i < m.allSes().length; i++){
+			for(int j = i + 1; j < m.allSes().length; j++){
+				double exact = m.exactJaccard(m.allSes()[i], m.allSes()[j]);
+				double approx = m.approximateJaccard(m.allSes()[i], m.allSes()[j]);
+				if(exact - approx > error || approx - exact > error){
+					numOutsideError ++;
+				}
+			}
+		}
+		return numOutsideError;
+	}
+}
