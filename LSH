@@ -1,0 +1,214 @@
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.Random;
+import java.util.Scanner;
+
+/*
+ * input: collection of sessions  
+ * output: a list of session names, situation-session matrix, and a MinHash matrix
+ */
+ 
+public class MinHash {
+	public boolean testMode = true;
+	private int numPermutations;
+	private int numSituations;
+	private String[] SessionNameList;
+	BitSet[] situationSessionMatrix; 
+	private int[][] minHashMatrix;
+	private long minHashGenerationTime = 0;
+	
+	public MinHash(String folder, int numPermutations) throws FileNotFoundException{
+		File sessionFolder = new File(folder);
+		File[] sessionList = sessionFolder.listFiles();
+		SessionNameList = new String[sessionList.length];
+		for(int i = 0; i < sessionList.length; i++){
+			SessionNameList[i] = sessionList[i].getName();
+		}
+		
+		String[] situationList = generateListOfSituations(sessionList);
+		numSituations = situationList.length;
+		situationSessionMatrix = generateSituationSessionMatrix(sessionList, situationList);
+				
+		long startTime = System.currentTimeMillis();
+		this.numPermutations = numPermutations;
+		int[][] permutationMatrix = generatePermutationMatrix(numSituations, numPermutations);
+		
+		minHashMatrix = generateMinHashMatrix(permutationMatrix, situationSessionMatrix);
+		long endTime = System.currentTimeMillis();
+		minHashGenerationTime = endTime - startTime;
+	}
+	
+	/**
+	 * output: an array of session names
+	 */
+	public String[] allSessions(){
+		return SessionNameList;
+	}
+	
+	/**
+	 * input: name of first session and second session
+   * output: Jaccard similarity of the sessions
+	 */
+	public double exactJaccard(String Ses1, String Ses2){
+		int[] ses1Sig = exactSig(Ses1);
+		int[] ses2Sig = exactSig(Ses2);
+		int intersection = 0;
+		int union = 0;
+		for(int i = 0; i < numSituations; i++){
+			if(ses1Sig[i] > 0 && ses2Sig[i] > 0){
+				intersection ++;
+			}
+			if(ses1Sig[i] > 0 || ses2Sig[i] > 0){
+				union ++;
+			}
+		}
+		return (double)intersection / union;
+	}
+	
+	
+	/**
+	 * input: session name
+   * output: the situation frequency vector for a given session
+	 */
+	private int[] exactSig(String sessionName){
+		int sesIndex = getSesIndexFromName(sessionName);
+		int[] sig = new int[numSituations];
+		for(int i = 0; i < numSituations; i++){
+			sig[i] = situationSessionMatrix[i].get(sesIndex)? 1:0;
+		}
+		return sig;
+	}
+	
+	
+	/**
+	 * input: session name
+	 * output: the minhash signature of the session
+	 */
+	public int[] minHashSig(String sessionName){
+		int sesIndex = getSesIndexFromName(sessionName);
+		int[] sig = new int[numPermutations];
+		for(int i = 0; i < numPermutations; i++){
+			sig[i] = minHashMatrix[i][sesIndex];
+		}
+		return sig;
+	}
+	
+	/**
+	 * input: ses1 and ses 2 
+   * output: approximate the Jaccard similarity of two sessions by comparing their minhash signatures
+	 */
+	public double approximateJaccard(String ses1, String ses2){
+		int[] ses1Sig = minHashSig(ses1);
+		int[] ses2Sig = minHashSig(ses2);
+		int matches = 0;
+		for(int i = 0; i < numPermutations; i++){
+			if(ses1Sig[i] == ses2Sig[i]){
+				matches++;
+			}
+		}
+		return (double)matches/numPermutations;
+	}
+	
+	/**
+	 * input: an integer matrix composed of the minhash signatures of all sessions
+	 * output: an integer matrix with minhash signatures
+	 */
+	public int[][] minHashMatrix(){
+		return minHashMatrix;
+	}
+	
+	/**
+	 * output: total number of situations found in the sessions
+	 */
+	public int numSituations(){
+		return numSituations;
+	}
+	
+	/**
+	 * output: number of permutations specified for the minhash matrix
+	 */
+	public int numPerumtations(){
+		return numPermutations;
+	}
+
+	/**
+	 * input:session list
+   * output: frequency matric for each situation in each session
+	 */
+	private BitSet[] generateSituationSessionMatrix(File[] sesList, String[] situationList) throws FileNotFoundException{
+		BitSet[] SSMatrix = new BitSet[numSituations];
+		//int[][] situationSessionMatrix = new int[numSituations][SessionNameList.length];
+		for(int i = 0; i < numSituations; i++){
+			SSMatrix[i] = new BitSet(SessionNameList.length);
+		}
+		for(int i = 0; i < SessionNameList.length; i++){
+			Scanner sc = new Scanner(sesList[i]);
+			while(sc.hasNextLine()){
+				String s = sc.nextLine();
+				String[] sList = s.split(" ");
+				for(String situation : sList){
+					situation = situation.toLowerCase();
+					situation = situation.replaceAll("[.,:;'\t]", "");
+					if(!(situation.length() < 3 || s.equals("the"))){
+						int situationIndex = Arrays.binarySearch(situationList, situation);
+						SSMatrix[situationIndex].set(i);
+						//situationSessionMatrix[situationIndex][i] ++;
+					}
+				}
+			}
+			sc.close();
+		}
+		return SSMatrix;
+	}
+	
+	private int[][] generatePermutationMatrix(int numSituations, int numPermutations){
+		int[][] permutationMatrix = new int[numPermutations][numSituations];
+		Random ran = new Random();
+		for(int i = 0; i < numPermutations; i++){
+			for(int j = 0; j < numSituations; j++){
+				permutationMatrix[i][j] = j;
+			}
+			int index, temp;
+			for(int j = numSituations - 1; j > 0; j--){
+				index = ran.nextInt(j+1); 
+				temp = permutationMatrix[i][index];
+				permutationMatrix[i][index] = permutationMatrix[i][j];
+				permutationMatrix[i][j] = temp;
+			}
+		}
+		return permutationMatrix;
+	}
+	
+	/**
+	 * input:  permutation matrix, situation-session matrix
+	 * output: A minhash matrix
+	 */
+	private int[][] generateMinHashMatrix(int[][] permutationMatrix, BitSet[] situationSessionMatrix){
+		int[][] minHashMatrix = new int[numPermutations][SessionNameList.length];
+		for(int i = 0; i < numPermutations; i++){
+			for(int j = 0; j < SessionNameList.length; j++){
+				int min = numSituations;
+				for(int k = 0; k < numSituations; k++){
+					if(situationSessionMatrix[k].get(j)){
+						min = (permutationMatrix[i][k] < min)? permutationMatrix[i][k] : min;
+					}
+				}
+				minHashMatrix[i][j] = min;
+			}
+		}
+		return minHashMatrix;
+	}
+	
+	
+	/**
+	 * output: additional amount of time needed to make the permutation and minhash matrices.
+	 */
+	public long minHashGenerationTime(){
+		return minHashGenerationTime;
+	}
+	
+}
